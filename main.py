@@ -5,10 +5,8 @@ from sqlalchemy import create_engine, Column, Integer, String, Text
 from sqlalchemy.orm import declarative_base, sessionmaker
 import time, random, requests
 
-# --- ТОКЕН БОТА ---
 BOT_TOKEN = "9229804048:AAECzn-YF2dcTb4tUyP5pbl8rk8sP8n7PFY"
 
-# --- БАЗА ДАННЫХ ---
 SQLALCHEMY_DATABASE_URL = "sqlite:///./material_chat.db"
 engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -40,7 +38,6 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, 
 
 tg_codes = {}
 
-# --- МОДЕЛИ ДАННЫХ ---
 class AuthData(BaseModel):
     username: str
     email: str = None
