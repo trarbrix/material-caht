@@ -1,7 +1,11 @@
-BOT_TOKEN = "9229804048:AAECzn-YF2dcTb4tUyP5pbl8rk8sP8n7PFY"
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from sqlalchemy import create_engine, Column, Integer, String, Text
+from sqlalchemy.orm import declarative_base, sessionmaker
+import time, random, requests
 
-# Создаем папку для файлов
-os.makedirs("uploads", exist_ok=True)
+BOT_TOKEN = "9229804048:AAECzn-YF2dcTb4tUyP5pbl8rk8sP8n7PFY"
 
 SQLALCHEMY_DATABASE_URL = "sqlite:///./material_chat.db"
 engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
@@ -23,7 +27,7 @@ class MessageDB(Base):
     chat_id = Column(String, index=True)
     sender = Column(String)
     text = Column(Text, nullable=True)
-    media_url = Column(String, nullable=True) # <-- Ссылка на файл
+    media_url = Column(String, nullable=True)
     msg_type = Column(String)
     time = Column(String)
 
@@ -31,7 +35,6 @@ Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads") # Раздаем файлы
 
 tg_codes = {}
 
@@ -58,7 +61,7 @@ class MessageData(BaseModel):
     chat_id: str
     sender: str
     text: str = None
-    media_url: str = None # <-- Добавили
+    media_url: str = None
     msg_type: str = "text"
 
 def get_chat_id_by_username(username):
@@ -126,14 +129,6 @@ def reset_password(data: ResetReq):
         return {"status": "ok"}
     finally:
         db.close()
-
-# --- ЗАГРУЗКА ФАЙЛОВ ---
-@app.post("/api/upload")
-async def upload_file(file: UploadFile = File(...)):
-    file_location = f"uploads/{int(time.time())}_{file.filename}"
-    with open(file_location, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-    return {"url": f"http://127.0.0.1:8000/{file_location}"}
 
 @app.get("/api/messages/{chat_id}")
 def get_messages(chat_id: str):
