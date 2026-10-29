@@ -1,11 +1,13 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from sqlalchemy import create_engine, Column, Integer, String, Text
 from sqlalchemy.orm import declarative_base, sessionmaker
-import time, random, requests
+import time, random, requests, os, shutil
 
 BOT_TOKEN = "9229804048:AAECzn-YF2dcTb4tUyP5pbl8rk8sP8n7PFY"
+os.makedirs("uploads", exist_ok=True)
 
 SQLALCHEMY_DATABASE_URL = "sqlite:///./material_chat.db"
 engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
@@ -35,6 +37,7 @@ Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 tg_codes = {}
 
@@ -51,11 +54,6 @@ class TGReq(BaseModel):
 class VerifyReq(BaseModel):
     tg_username: str
     code: str
-
-class ResetReq(BaseModel):
-    tg_username: str
-    code: str
-    new_password: str
 
 class MessageData(BaseModel):
     chat_id: str
@@ -116,19 +114,12 @@ def auth(data: AuthData):
     finally:
         db.close()
 
-@app.post("/api/reset_password")
-def reset_password(data: ResetReq):
-    db = SessionLocal()
-    try:
-        tg_name = data.tg_username.replace("@", "").strip()
-        if tg_codes.get(tg_name) != data.code: raise HTTPException(status_code=400, detail="Неверный код")
-        user = db.query(UserDB).filter(UserDB.tg_username == tg_name).first()
-        if not user: raise HTTPException(status_code=404, detail="Пользователь не найден")
-        user.password = data.new_password
-        db.commit()
-        return {"status": "ok"}
-    finally:
-        db.close()
+@app.post("/api/upload")
+async def upload_file(file: UploadFile = File(...)):
+    file_location = f"uploads/{int(time.time())}_{file.filename}"
+    with open(file_location, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+    return {"url": f"https://material-caht.onrender.com/{file_location}"}
 
 @app.get("/api/messages/{chat_id}")
 def get_messages(chat_id: str):
