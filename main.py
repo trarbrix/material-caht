@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, HTTPException, UploadFile, File, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -115,11 +115,16 @@ def auth(data: AuthData):
         db.close()
 
 @app.post("/api/upload")
-async def upload_file(file: UploadFile = File(...)):
-    file_location = f"uploads/{int(time.time())}_{file.filename}"
+async def upload_file(request: Request, file: UploadFile = File(...)):
+    filename = f"{int(time.time())}_{file.filename}"
+    file_location = f"uploads/{filename}"
+    
     with open(file_location, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
-    return {"url": f"https://material-caht.onrender.com/{file_location}"}
+    
+    # ДИНАМИЧЕСКАЯ ССЫЛКА (сама подставит правильный URL)
+    base_url = str(request.base_url).rstrip("/")
+    return {"url": f"{base_url}/{file_location}"}
 
 @app.get("/api/messages/{chat_id}")
 def get_messages(chat_id: str):
