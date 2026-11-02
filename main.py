@@ -6,12 +6,38 @@ from sqlalchemy import create_engine, Column, Integer, String, Text
 from sqlalchemy.orm import declarative_base, sessionmaker
 import time, random, requests, os, shutil
 
-# Скопируй сюда строку BOT_TOKEN из своего существующего server/main.py.
-BOT_TOKEN = "ВСТАВЬ_СТАРЫЙ_ТОКЕН"
-os.makedirs("uploads", exist_ok=True)
+# Укажите прежний токен в Environment сервера; не публикуйте его в Git.
+BOT_TOKEN = os.environ.get("MATERIAL_CHAT_BOT_TOKEN", "ВСТАВЬ_СТАРЫЙ_ТОКЕН")
 
-SQLALCHEMY_DATABASE_URL = "sqlite:///./material_chat.db"
-engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
+# Без настроек используются прежние файлы SQLite и uploads, без переноса данных.
+# Для постоянного диска задайте MATERIAL_CHAT_DATA_DIR; для PostgreSQL —
+# MATERIAL_CHAT_DATABASE_URL. Базу и файлы необходимо перенести отдельно.
+data_dir = os.environ.get("MATERIAL_CHAT_DATA_DIR", "").strip()
+if data_dir:
+    data_dir = os.path.abspath(data_dir)
+    os.makedirs(data_dir, exist_ok=True)
+uploads_dir = os.path.join(data_dir, "uploads") if data_dir else "uploads"
+os.makedirs(uploads_dir, exist_ok=True)
+
+SQLALCHEMY_DATABASE_URL = os.environ.get("MATERIAL_CHAT_DATABASE_URL", "").strip()
+if not SQLALCHEMY_DATABASE_URL:
+    if data_dir:
+        from sqlalchemy.engine import URL
+        SQLALCHEMY_DATABASE_URL = URL.create("sqlite", database=os.path.join(data_dir, "material_chat.db"))
+    else:
+        SQLALCHEMY_DATABASE_URL = "sqlite:///./material_chat.db"
+elif SQLALCHEMY_DATABASE_URL.startswith("postgres://"):
+    SQLALCHEMY_DATABASE_URL = "postgresql+psycopg://" + SQLALCHEMY_DATABASE_URL[len("postgres://"):]
+elif SQLALCHEMY_DATABASE_URL.startswith("postgresql://"):
+    SQLALCHEMY_DATABASE_URL = "postgresql+psycopg://" + SQLALCHEMY_DATABASE_URL[len("postgresql://"):]
+
+from sqlalchemy.engine import make_url
+is_sqlite = make_url(SQLALCHEMY_DATABASE_URL).get_backend_name() == "sqlite"
+engine = create_engine(
+    SQLALCHEMY_DATABASE_URL,
+    connect_args={"check_same_thread": False} if is_sqlite else {},
+    pool_pre_ping=not is_sqlite,
+)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
@@ -38,7 +64,7 @@ Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+app.mount("/uploads", StaticFiles(directory=uploads_dir), name="uploads")
 
 tg_codes = {}
 
@@ -118,14 +144,14 @@ def auth(data: AuthData):
 @app.post("/api/upload")
 async def upload_file(request: Request, file: UploadFile = File(...)):
     filename = f"{int(time.time())}_{file.filename}"
-    file_location = f"uploads/{filename}"
+    file_location = os.path.join(uploads_dir, filename)
     
     with open(file_location, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
     
     # ДИНАМИЧЕСКАЯ ССЫЛКА (сама подставит правильный URL)
     base_url = str(request.base_url).rstrip("/")
-    return {"url": f"{base_url}/{file_location}"}
+    return {"url": f"{base_url}/uploads/{filename}"}
 
 @app.get("/api/messages/{chat_id}")
 def get_messages(chat_id: str):
