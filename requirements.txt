@@ -3,3 +3,4 @@ uvicorn
 sqlalchemy
 requests
 python-multipart
+psycopg[binary]
